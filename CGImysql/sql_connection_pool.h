@@ -27,8 +27,8 @@ public:
 
   static connection_pool *getInstance();      // 单例模式
 
-  void init(string url, string user, string passwd,
-            string database, int port, unsigned int maxConn);
+  void init(const string& url, const string& user, const string& passwd,
+            const string& database, int port, unsigned int maxConn);
 
   connection_pool();
   ~connection_pool();

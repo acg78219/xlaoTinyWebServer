@@ -28,8 +28,8 @@ connection_pool *connection_pool::getInstance()
 }
 
 // 连接池的初始化
-void connection_pool::init(string url, string user, string passwd,
-                           string database, int port, unsigned int maxConn)
+void connection_pool::init(const string& url, const string& user, const string& passwd,
+                           const string& database, int port, unsigned int maxConn)
 {
   printf("2");
   this->url = url;

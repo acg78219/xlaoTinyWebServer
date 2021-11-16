@@ -24,11 +24,11 @@
 #define MAX_EVENT_NUMBER 10000      // 最大事件数
 #define TIMESLOT 5                  // 最小超时时间
 
-#define SYNLOG                      // 同步写日志
-//#define ASYNLOG                     // 异步写日志
+//#define SYNLOG                      // 同步写日志
+#define ASYNLOG                     // 异步写日志
 
-//#define listenfdET                  // 监听非阻塞ET
-#define listenfdLT                  // 监听阻塞LT
+#define listenfdET                  // 监听非阻塞ET
+//#define listenfdLT                  // 监听阻塞LT
 
 // 该三文件在 http_conn.cpp 中
 extern int addfd(int epollfd, int fd, bool one_shot);

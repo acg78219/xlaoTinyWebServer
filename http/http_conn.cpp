@@ -12,8 +12,8 @@
 #define connfdET    //ET非阻塞
 //#define connfdLT      // 水平阻塞
 
-//#define listenfdET
-#define listenfdLT
+#define listenfdET
+//#define listenfdLT
 
 // 定义 http 响应的一些状态信息
 const char* ok_200_title = "OK";
