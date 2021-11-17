@@ -14,7 +14,6 @@
 
 #include "./locker/locker.h"
 #include "./threadPool/threadPool.h"
-#include "./timer/list_timer.h"
 #include "./timer/time_heap.h"
 #include "./http/http_conn.h"
 #include "./log/log.h"
@@ -37,8 +36,7 @@ int setNonBlocking(int fd);
 
 // 设置定时器相关的参数
 static int pipefd[2];                 // 父子进程通信管道，传递信号
-static sort_timer_list timer_list;    // 定时器链表
-static time_heap::time_heap timer_heap;
+static time_heap timer_heap;
 static int epollfd = 0;
 
 // 信号处理函数
@@ -71,12 +69,11 @@ void addsig(int sig, void(handler)(int), bool restart = true)
 void timer_handler()
 {
   timer_heap.tick();
-  //timer_list.tick();
   alarm(TIMESLOT);
 }
 
 // 定时器回调函数，删除非活跃的socket的注册事件，并关闭
-void cb_func(time_heap::client_data *user_data)
+void cb_func(client_data *user_data)
 {
   // 1. 从内核事件表中删除事件
   epoll_ctl(epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
@@ -173,7 +170,7 @@ int main(int argc, char* argv[])
   addsig(SIGTERM, sig_handler, false);
   bool stop_server = false;
 
-  time_heap::client_data* users_timer = new time_heap::client_data[MAX_FD];
+  client_data* users_timer = new client_data[MAX_FD];
 
   bool timeout = false;
   alarm(TIMESLOT);        // 定时触发 alarm
@@ -214,20 +211,9 @@ int main(int argc, char* argv[])
         // 将 connfd 注册到内核，同时初始化连接
         users[connfd].init(connfd, client_address);
 
-        // 初始化 client_data 数据
-        // 创建定时器，设置回调函数，超时时间，将定时器加入链表
-//        users_timer[connfd].address = client_address;
-//        users_timer[connfd].sockfd = connfd;
-//        util_timer* timer = new util_timer;
-//        timer->user_data = &users_timer[connfd];
-//        timer->cb_func = cb_func;
-//        time_t curr = time(NULL);
-//        timer->expire = curr + 3 * TIMESLOT;  // 超时绝对时间
-//        users_timer[connfd].timer = timer;
-//        timer_list.add_timer(timer);
         users_timer[connfd].address = client_address;
         users_timer[connfd].sockfd = connfd;
-        auto timer = new time_heap::heap_timer;
+        auto timer = new heap_timer;
         timer->user_data = &users_timer[connfd];
         timer->cb_func = cb_func;
         timer->expire = curr + 3 * TIMESLOT;  // 超时绝对时间
@@ -252,18 +238,9 @@ int main(int argc, char* argv[])
           }
           users[connfd].init(connfd, client_address);
 
-//            users_timer[connfd].address = client_address;
-//            users_timer[connfd].sockfd = connfd;
-//            util_timer* timer = new util_timer;
-//            timer->user_data = &users_timer[connfd];
-//            timer->cb_func = cb_func;
-//            time_t curr = time(NULL);
-//            timer->expire = curr + 3 * TIMESLOT;
-//            users_timer[connfd].timer = timer;
-//            timer_list.add_timer(timer);
           users_timer[connfd].address = client_address;
           users_timer[connfd].sockfd = connfd;
-          auto timer = new time_heap::heap_timer;
+          auto timer = new heap_timer;
           timer->user_data = &users_timer[connfd];
           timer->cb_func = cb_func;
           time_t curr = time(NULL);
@@ -279,14 +256,10 @@ int main(int argc, char* argv[])
       {
         // 服务器关闭连接，移除定时器
         auto timer = users_timer[sockfd].timer;
-        //util_timer* timer = users_timer[sockfd].timer;
         timer->cb_func(&users_timer[sockfd]); // 删除连接，关闭fd
 
         if(timer)
-        {
           timer_heap.del_timer(timer);
-          //timer_list.del_timer(timer);
-        }
 
       }
 
@@ -336,17 +309,13 @@ int main(int argc, char* argv[])
             timer->expire = curr + 3 * TIMESLOT;
             LOG_INFO("%s", "adjust timer once");
             Log::get_instance()->flush();
-            //timer_list.adjust_timer(timer);
           }
         }
         else
         {
           timer->cb_func(&users_timer[sockfd]);
           if(timer)
-          {
             timer_heap.del_timer(timer);
-            //timer_list.del_timer(timer);
-          }
 
         }
       }
@@ -365,17 +334,13 @@ int main(int argc, char* argv[])
             timer->expire = curr + 3 * TIMESLOT;
             LOG_INFO("%s", "adjust timer once");
             Log::get_instance()->flush();
-            //timer_list.adjust_timer(timer);
           }
         }
         else
         {
           timer->cb_func(&users_timer[sockfd]);
           if(timer)
-          {
-            //timer_list.del_timer(timer);
             timer_heap.del_timer(timer);
-          }
 
         }
       }
