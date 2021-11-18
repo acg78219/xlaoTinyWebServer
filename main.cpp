@@ -123,7 +123,7 @@ int main(int argc, char* argv[])
 
   // 创建数据库连接池
   connection_pool* connPool = connection_pool::getInstance();
-  connPool->init("localhost", "root", "laoxinghaoTay57", "test", 3306, 8);
+  connPool->init("localhost", "root", "xxx", "test", 3306, 8);
 
   // 创建线程池
   threadPool<http_conn> *pool = NULL;
