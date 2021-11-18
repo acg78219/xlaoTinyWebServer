@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/epoll.h>
@@ -16,10 +17,11 @@
 #include "./timer/time_heap.h"
 #include "./http/http_conn.h"
 #include "./log/log.h"
+#include "./CGImysql/sql_connection_pool.h"
 
 #define MAX_FD 65536                // 最大文件描述符
 #define MAX_EVENT_NUMBER 10000      // 最大事件数
-#define TIMESLOT 30
+#define TIMESLOT 5                  // 最小超时时间
 
 //#define SYNLOG                      // 同步写日志
 #define ASYNLOG                     // 异步写日志
@@ -36,7 +38,6 @@ int setNonBlocking(int fd);
 static int pipefd[2];                 // 父子进程通信管道，传递信号
 static time_heap timer_heap;
 static int epollfd = 0;
-static bool isAlarm = false;          // 判断当时是否正在执行定时任务
 
 // 信号处理函数
 void sig_handler(int sig)
@@ -64,21 +65,11 @@ void addsig(int sig, void(handler)(int), bool restart = true)
   assert(sigaction(sig, &sa, NULL) != -1);
 }
 
-// 定时处理任务，根据堆顶时间来触发 SIGALRM 信号
+// 定时处理任务，不断定时触发 SIGALRM 信号
 void timer_handler()
 {
-  // 首先处理到时的时间
   timer_heap.tick();
-  // 发送 alarm 的时间根据当前堆顶的时间（最小时间），提高了效率
-  // 还需要判断当前是否在执行定时任务，用 isAlarm 判断
-  heap_timer* temp = nullptr;
-  if(!isAlarm && (temp = timer_heap.Top()))
-  {
-    time_t delay = temp->expire - time(nullptr);
-    if(delay <= 0)  delay = 1;
-    alarm(delay);
-    isAlarm = true;
-  }
+  alarm(TIMESLOT);
 }
 
 // 定时器回调函数，删除非活跃的socket的注册事件，并关闭
@@ -91,8 +82,6 @@ void cb_func(client_data *user_data)
   close(user_data->sockfd);
   // 3. 更新连接的用户
   http_conn::m_user_count--;
-  // 4. 当前没有执行定时任务
-  isAlarm = false;
   LOG_INFO("close fd %d", user_data->sockfd);
   Log::get_instance()->flush();
 }
@@ -138,7 +127,6 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-  // http 连接实例
   http_conn* users = new http_conn[MAX_FD];
   assert(users);
 
@@ -187,7 +175,8 @@ int main(int argc, char* argv[])
   bool timeout = false;
   alarm(TIMESLOT);        // 定时触发 alarm
 
-  // loop 事件循环
+
+  // 只要不发 SIGTERM，则一直执行下面的语句（服务器一直运行）
   while(!stop_server)
   {
     int number = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);
@@ -219,56 +208,45 @@ int main(int argc, char* argv[])
           LOG_ERROR("%s", "Internal server busy");
           continue;
         }
-
         // 将 connfd 注册到内核，同时初始化连接
         users[connfd].init(connfd, client_address);
 
-        // 为新连接创建一个定时器，加入时间堆中
         users_timer[connfd].address = client_address;
         users_timer[connfd].sockfd = connfd;
-        auto timer = new heap_timer(TIMESLOT);  // 有参构造，expire = 当前时间 + TIMESLOT
+        auto timer = new heap_timer;
         timer->user_data = &users_timer[connfd];
         timer->cb_func = cb_func;
-        timer_heap.add_timer(timer);
-        // 如果当前没有定时任务，则触发 alarm 信号
-        if(!isAlarm)
-        {
-            isAlarm = true;
-            alarm(TIMESLOT);
-        }
+        timer->expire = curr + 3 * TIMESLOT;  // 超时绝对时间
         users_timer[connfd].timer = timer;
+        timer_heap.add_timer(timer);
 #endif
 
 #ifdef listenfdET
         while(1)
           {
-            int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_address_len);
-            if(connfd < 0)
-            {
-              LOG_ERROR("%s:errno is:%d", "accept error", errno);
-              break;
-            }
-            if(http_conn::m_user_count >= MAX_FD)
-            {
-              show_error(connfd, "Internal server busy");
-              LOG_ERROR("%s", "Internal server busy");
-              continue;
-            }
-            users[connfd].init(connfd, client_address);
+          int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_address_len);
+          if(connfd < 0)
+          {
+            LOG_ERROR("%s:errno is:%d", "accept error", errno);
+            break;
+          }
+          if(http_conn::m_user_count >= MAX_FD)
+          {
+            show_error(connfd, "Internal server busy");
+            LOG_ERROR("%s", "Internal server busy");
+            continue;
+          }
+          users[connfd].init(connfd, client_address);
 
-            users_timer[connfd].address = client_address;
-            users_timer[connfd].sockfd = connfd;
-            auto timer = new heap_timer(TIMESLOT);
-            timer->user_data = &users_timer[connfd];
-            timer->cb_func = cb_func;
-            timer_heap.add_timer(timer);
-            // 如果当前没有定时任务，则触发 alarm 信号
-            if(!isAlarm)
-            {
-                isAlarm = true;
-                alarm(TIMESLOT);
-            }
-              users_timer[connfd].timer = timer;
+          users_timer[connfd].address = client_address;
+          users_timer[connfd].sockfd = connfd;
+          auto timer = new heap_timer;
+          timer->user_data = &users_timer[connfd];
+          timer->cb_func = cb_func;
+          time_t curr = time(NULL);
+          timer->expire = curr + 3 * TIMESLOT;  // 超时绝对时间
+          users_timer[connfd].timer = timer;
+          timer_heap.add_timer(timer);
           }
         continue;
 #endif
@@ -278,12 +256,14 @@ int main(int argc, char* argv[])
       {
         // 服务器关闭连接，移除定时器
         auto timer = users_timer[sockfd].timer;
-        timer->cb_func(&users_timer[sockfd]);
+        timer->cb_func(&users_timer[sockfd]); // 删除连接，关闭fd
+
         if(timer)
           timer_heap.del_timer(timer);
+
       }
 
-      // 主线程处理信号
+      // 主程序处理信号
       else if((sockfd == pipefd[0]) && (events[i].events & EPOLLIN))
       {
         int sig;
@@ -306,7 +286,6 @@ int main(int argc, char* argv[])
               }
               case SIGTERM:
                 stop_server = true;
-                break;
             }
           }
         }
@@ -316,7 +295,6 @@ int main(int argc, char* argv[])
       else if(events[i].events & EPOLLIN)
       {
         auto timer = users_timer[sockfd].timer;
-        // 读取数据
         if(users[sockfd].read_once())
         {
           LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
@@ -324,14 +302,13 @@ int main(int argc, char* argv[])
           // 若检测到读事件，将该事件放入请求队列
           pool->append(users + sockfd);
 
-          // 该连接活跃，更新定时器的时间
+          // 该连接活跃，更新定时器在链表中的位置
           if(timer)
           {
             time_t curr = time(NULL);
-            timer->expire = curr + 2 * TIMESLOT;
+            timer->expire = curr + 3 * TIMESLOT;
             LOG_INFO("%s", "adjust timer once");
             Log::get_instance()->flush();
-            isAlarm = false;
           }
         }
         else
@@ -339,6 +316,7 @@ int main(int argc, char* argv[])
           timer->cb_func(&users_timer[sockfd]);
           if(timer)
             timer_heap.del_timer(timer);
+
         }
       }
       else if(events[i].events & EPOLLOUT)
@@ -353,7 +331,7 @@ int main(int argc, char* argv[])
           if(timer)
           {
             time_t curr = time(NULL);
-            timer->expire = curr + 2 * TIMESLOT;
+            timer->expire = curr + 3 * TIMESLOT;
             LOG_INFO("%s", "adjust timer once");
             Log::get_instance()->flush();
           }
@@ -363,6 +341,7 @@ int main(int argc, char* argv[])
           timer->cb_func(&users_timer[sockfd]);
           if(timer)
             timer_heap.del_timer(timer);
+
         }
       }
     }
