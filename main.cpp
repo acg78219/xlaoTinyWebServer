@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/epoll.h>
@@ -17,11 +16,10 @@
 #include "./timer/time_heap.h"
 #include "./http/http_conn.h"
 #include "./log/log.h"
-#include "./CGImysql/sql_connection_pool.h"
 
 #define MAX_FD 65536                // 最大文件描述符
 #define MAX_EVENT_NUMBER 10000      // 最大事件数
-#define TIMESLOT 5                  // 最小超时时间
+#define TIMESLOT 30                  // 最小超时时间
 
 //#define SYNLOG                      // 同步写日志
 #define ASYNLOG                     // 异步写日志
@@ -38,6 +36,7 @@ int setNonBlocking(int fd);
 static int pipefd[2];                 // 父子进程通信管道，传递信号
 static time_heap timer_heap;
 static int epollfd = 0;
+static bool isAlarm = false;
 
 // 信号处理函数
 void sig_handler(int sig)
@@ -69,7 +68,14 @@ void addsig(int sig, void(handler)(int), bool restart = true)
 void timer_handler()
 {
   timer_heap.tick();
-  alarm(TIMESLOT);
+  heap_timer* temp = nullptr;
+  if(!isAlarm && (temp = timer_heap.Top()))
+  {
+    time_t delay = temp->expire - time(nullptr);
+    if(delay <= 0) delay = 1;
+    alarm(delay);
+    isAlarm = true;
+  }
 }
 
 // 定时器回调函数，删除非活跃的socket的注册事件，并关闭
@@ -82,6 +88,8 @@ void cb_func(client_data *user_data)
   close(user_data->sockfd);
   // 3. 更新连接的用户
   http_conn::m_user_count--;
+  // 4. 设置当前无正在处理定时事件
+  isAlarm = false;
   LOG_INFO("close fd %d", user_data->sockfd);
   Log::get_instance()->flush();
 }
@@ -213,12 +221,16 @@ int main(int argc, char* argv[])
 
         users_timer[connfd].address = client_address;
         users_timer[connfd].sockfd = connfd;
-        auto timer = new heap_timer;
+        auto timer = new heap_timer(TIMESLOT);    //timer的expire为 当前+TIMESLOT
         timer->user_data = &users_timer[connfd];
         timer->cb_func = cb_func;
-        timer->expire = curr + 3 * TIMESLOT;  // 超时绝对时间
-        users_timer[connfd].timer = timer;
         timer_heap.add_timer(timer);
+        if(!isAlarm)
+        {
+          isAlarm = true;
+          alarm(TIMESLOT);
+        }
+        users_timer[connfd].timer = timer;
 #endif
 
 #ifdef listenfdET
@@ -240,13 +252,16 @@ int main(int argc, char* argv[])
 
           users_timer[connfd].address = client_address;
           users_timer[connfd].sockfd = connfd;
-          auto timer = new heap_timer;
+          auto timer = new heap_timer(TIMESLOT);    //timer的expire为 当前+TIMESLOT
           timer->user_data = &users_timer[connfd];
           timer->cb_func = cb_func;
-          time_t curr = time(NULL);
-          timer->expire = curr + 3 * TIMESLOT;  // 超时绝对时间
-          users_timer[connfd].timer = timer;
           timer_heap.add_timer(timer);
+          if(!isAlarm)
+          {
+            isAlarm = true;
+            alarm(TIMESLOT);
+          }
+          users_timer[connfd].timer = timer;
           }
         continue;
 #endif
@@ -257,10 +272,8 @@ int main(int argc, char* argv[])
         // 服务器关闭连接，移除定时器
         auto timer = users_timer[sockfd].timer;
         timer->cb_func(&users_timer[sockfd]); // 删除连接，关闭fd
-
         if(timer)
           timer_heap.del_timer(timer);
-
       }
 
       // 主程序处理信号
@@ -286,6 +299,7 @@ int main(int argc, char* argv[])
               }
               case SIGTERM:
                 stop_server = true;
+                break;
             }
           }
         }
@@ -306,7 +320,7 @@ int main(int argc, char* argv[])
           if(timer)
           {
             time_t curr = time(NULL);
-            timer->expire = curr + 3 * TIMESLOT;
+            timer->expire = curr + 2 * TIMESLOT;
             LOG_INFO("%s", "adjust timer once");
             Log::get_instance()->flush();
           }
@@ -316,7 +330,6 @@ int main(int argc, char* argv[])
           timer->cb_func(&users_timer[sockfd]);
           if(timer)
             timer_heap.del_timer(timer);
-
         }
       }
       else if(events[i].events & EPOLLOUT)
@@ -331,7 +344,7 @@ int main(int argc, char* argv[])
           if(timer)
           {
             time_t curr = time(NULL);
-            timer->expire = curr + 3 * TIMESLOT;
+            timer->expire = curr + 2 * TIMESLOT;
             LOG_INFO("%s", "adjust timer once");
             Log::get_instance()->flush();
           }
@@ -341,7 +354,6 @@ int main(int argc, char* argv[])
           timer->cb_func(&users_timer[sockfd]);
           if(timer)
             timer_heap.del_timer(timer);
-
         }
       }
     }
