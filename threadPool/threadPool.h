@@ -26,6 +26,7 @@ private:
   // 工作线程的运行函数，不断从请求队列中取出任务并执行
   static void* worker(void* arg);
   void run();
+
 private:
   int m_thread_number;          // 线程池中的线程数
   int m_max_requests;           // 请求队列中最大的请求数
@@ -34,7 +35,7 @@ private:
   locker m_queueLocker;         // 请求队列的互斥锁
   sem m_queueStat;              // 信号量，说明是否有任务需要处理
   bool m_stop;                  // 是否结束线程
-  connection_pool *m_connPool;   // 数据库
+  connection_pool *m_connPool;  // 数据库连接池
 };
 
 template <typename T>
@@ -117,9 +118,10 @@ void threadPool<T>::run()
     m_queueLocker.unlock();             // 解锁，关键代码区结束
     if(!request)
       continue;
-    // 工作线程具体工作
+
+    // 工作线程处理工作
     connectionRAII mysqlcon(&request->mysql, m_connPool);
-    request->process();
+    request->process();                             // 调用模板类的 process 方法，即 http 类的 process
   }
 }
 

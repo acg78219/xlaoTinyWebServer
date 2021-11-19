@@ -31,7 +31,7 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the request file.\n";
 
 // root 文件夹的路径
-const char* doc_root = "/home/acg/Documents/study/netWork/xlaoTinyWebServer/root";
+const char* doc_root = "/home/acg/Documents/study/netWork/webServerTemp/xlaoTinyWebServer/root";
 
 // 将表中的用户名和密码放入 map 中
 map<string, string> users;
@@ -248,7 +248,7 @@ bool http_conn::read_once()
 
 #ifdef connfdET
   // ET 模式只会触发一次，所以要循环读取
-  // ET 必须设置文件是非阻塞，因为读空recv阻塞的话会卡住，无法跳出 while
+  // ET 必须设置文件是非阻塞，因为读空 recv 阻塞的话会卡住，无法跳出 while
   while(true)
   {
     bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
@@ -473,7 +473,7 @@ http_conn::HTTP_CODE http_conn::do_request()
       passwd[j] = m_string[i];
     passwd[j] = '\0';
 
-    // 同步线程登录校验
+    // 同步线程注册校验
     if(*(p + 1) == '3')
     {
       // 如果是注册，先检查数据库是否有重名，没有则增加
@@ -836,18 +836,19 @@ bool http_conn::process_write(HTTP_CODE ret)
 // 处理 http 请求的入口函数
 void http_conn::process()
 {
-  // 进来首先解析请求报文
+  // 进来首先解析请求报文,保存返回的状态
   HTTP_CODE read_ret = process_read();
+  // 如果还没读取完，则继续读取
   if(read_ret == NO_REQUEST)
   {
     modfd(m_epollfd, m_sockfd, EPOLLIN);
     return;
   }
-  // 解析完请求报文后，编写响应报文
+  // 根据解析后的状态填写响应报文
   bool write_ret = process_write(read_ret);
   if(!write_ret)
     close_conn();
-  // 编写好响应报文后，注册 EPOLLOUT，主线程检测到写事件，调用 http_conn::write 将报文发给客户端
+  // 编写好响应报文后，注册 EPOLLOUT，主线程检测到写就绪事件，调用 http_conn::write 将报文发给客户端
   modfd(m_epollfd, m_sockfd, EPOLLOUT);
 }
 

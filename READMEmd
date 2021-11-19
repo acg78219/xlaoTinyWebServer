@@ -1,0 +1,8 @@
+# XlaoTinyWebServer
+
+## 这是什么
+
+本项目参考游双的《Linux高性能服务器编程》和 qinguoyi 前辈的 **[ TinyWebServer](https://github.com/qinguoyi/TinyWebServer)**，自制实现一个 Linux 下 C++ 轻量级的 Web 服务器，该服务器拥有以下特性：
+
+- 并发模型：线程池 + epoll（LT + ET）+ 同步 I/O 模拟 Proactor。
+- 

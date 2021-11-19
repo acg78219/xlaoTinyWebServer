@@ -313,7 +313,8 @@ int main(int argc, char* argv[])
         {
           LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
           Log::get_instance()->flush();
-          // 若检测到读事件，将该事件放入请求队列
+
+          // 将处理好的读完成事件放入请求队列中
           pool->append(users + sockfd);
 
           // 该连接活跃，更新定时器在链表中的位置

@@ -8,8 +8,6 @@
 #include <string>
 #include <stdlib.h>
 #include <list>
-#include <pthread.h>
-#include <iostream>
 
 #include "sql_connection_pool.h"
 
@@ -31,7 +29,6 @@ connection_pool *connection_pool::getInstance()
 void connection_pool::init(const string& url, const string& user, const string& passwd,
                            const string& database, int port, unsigned int maxConn)
 {
-  printf("2");
   this->url = url;
   this->user = user;
   this->passwd = passwd;
@@ -56,14 +53,9 @@ void connection_pool::init(const string& url, const string& user, const string& 
 
     if(conn == NULL)
     {
-      printf("Error:%s\n", mysql_error(conn));
+      printf("Connect to mysql failure,Error:%s\n", mysql_error(conn));
       exit(1);
     }
-//
-//    if(!mysql_real_connect(conn, url.c_str(), user.c_str(), passwd.c_str(), database.c_str(), port, NULL, 0))
-//    {
-//      std::cout << mysql_error(conn) << "\t" << mysql_error(conn) << std::endl;
-//    }
 
     // 连接已经建立，将初始化好的连接放进连接池中
     connList.push_back(conn);
@@ -145,6 +137,7 @@ connection_pool::~connection_pool()
   destroyPool();
 }
 
+// 资源获取即初始化
 connectionRAII::connectionRAII(MYSQL **conn, connection_pool *connPool)
 {
   *conn = connPool->getConnection();

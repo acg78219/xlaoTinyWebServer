@@ -30,11 +30,9 @@ public:
   void init(const string& url, const string& user, const string& passwd,
             const string& database, int port, unsigned int maxConn);
 
+private:
   connection_pool();
   ~connection_pool();
-
-private:
-
 
 private:
   unsigned int maxConn;     // 最大连接数
