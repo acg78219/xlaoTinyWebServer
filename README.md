@@ -110,12 +110,12 @@ make server
 
 #### ET + ET，11640 QPS
 
-![](/home/acg/xlaoTinyWebServer/root/source/webbenchTest/ET+ET.png)
+![](https://github.com/acg78219/xlaoTinyWebServer/blob/master/root/source/webbenchTest/ET%2BET.png)
 
 
 #### LT + LT，10677 QPS
 
-![](/home/acg/xlaoTinyWebServer/root/source/webbenchTest/LT+LT.png)
+![](https://github.com/acg78219/xlaoTinyWebServer/blob/master/root/source/webbenchTest/LT%2BLT.png)
 
 
 
