@@ -31,7 +31,7 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the request file.\n";
 
 // root 文件夹的路径
-const char* doc_root = "/home/acg/Documents/study/netWork/webServerTemp/xlaoTinyWebServer/root";
+const char* doc_root = "/home/acg/xlaoTinyWebServer/root";
 
 // 将表中的用户名和密码放入 map 中
 map<string, string> users;
@@ -585,7 +585,9 @@ bool http_conn::write()
 {
   // 发送的数据在 m_iv 数组中，m_iv[0]是头部信息，[1]是文件内容
   int temp = 0;
+  int newadd = 0;
 
+  // 如果发送的数据为0
   if(bytes_to_send == 0)
   {
     modfd(m_epollfd, m_sockfd, EPOLLIN);
@@ -595,112 +597,59 @@ bool http_conn::write()
 
   while(1)
   {
+    // writev用于一次函数调用中写多个非连续的缓冲区
+    // 返回已写字节数
     temp = writev(m_sockfd, m_iv, m_iv_count);
-    if(temp < 0)
+
+    // 正常发送
+    if(temp >= 0)
     {
-      if(errno == EAGAIN)
-      {
-        modfd(m_epollfd, m_sockfd, EPOLLOUT);
-        return true;
-      }
-      unmap();
-      return false;
-    }
-    bytes_have_send += temp;
-    bytes_to_send -= temp;
-    if(bytes_have_send >= m_iv[0].iov_len)
-    {
-      m_iv[0].iov_len = 0;
-      m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
-      m_iv[1].iov_len = bytes_to_send;
+      bytes_have_send += temp;                // 更新已发送字节数
+      newadd = bytes_have_send - m_write_idx; // 偏移文件iovec的指针
     }
     else
     {
-      m_iv[0].iov_base = m_write_buf + bytes_have_send;
-      m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
+      // 判断是否是缓冲区已满
+      if(errno == EAGAIN)
+      {
+        // 第一个iovec头部信息发送完，发送第二个iovec
+        if(bytes_have_send >= m_iv[0].iov_len)
+        {
+          m_iv[0].iov_len = 0;    // 不再发[0]
+          m_iv[1].iov_base = m_file_address + newadd;
+          m_iv[1].iov_len = bytes_to_send;
+        }
+        // 继续发送第一个iovec头部信息的数据
+        else
+        {
+          m_iv[0].iov_base = m_write_buf + bytes_have_send;
+          m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
+        }
+        // 重新注册写事件
+        modfd(m_epollfd, m_sockfd, EPOLLOUT);
+        return true;
+      }
+      //如果发送失败，但不是缓冲区问题，取消映射
+      unmap();
+      return false;
     }
 
+    bytes_to_send -= temp;
+
+    // 如果数据发送完毕
     if(bytes_to_send <= 0)
     {
       unmap();
       modfd(m_epollfd, m_sockfd, EPOLLIN);
       if(m_linger)
       {
-        init();
+        init();     // 保持连接，不关闭，重新初始化 http 对象
         return true;
       }
       else
-      {
         return false;
-      }
     }
   }
-
-//  int newadd = 0;
-//
-//  // 如果发送的数据为0
-//  if(bytes_to_send == 0)
-//  {
-//    modfd(m_epollfd, m_sockfd, EPOLLIN);
-//    init();
-//    return true;
-//  }
-//
-//  while(1)
-//  {
-//    // writev用于一次函数调用中写多个非连续的缓冲区
-//    // 返回已写字节数
-//    temp = writev(m_sockfd, m_iv, m_iv_count);
-//
-//    // 正常发送
-//    if(temp >= 0)
-//    {
-//      bytes_have_send += temp;                // 更新已发送字节数
-//      newadd = bytes_have_send - m_write_idx; // 偏移文件iovec的指针
-//    }
-//    else
-//    {
-//      // 判断是否是缓冲区已满
-//      if(errno == EAGAIN)
-//      {
-//        // 第一个iovec头部信息发送完，发送第二个iovec
-//        if(bytes_have_send >= m_iv[0].iov_len)
-//        {
-//          m_iv[0].iov_len = 0;    // 不再发[0]
-//          m_iv[1].iov_base = m_file_address + newadd;
-//          m_iv[1].iov_len = bytes_to_send;
-//        }
-//        // 继续发送第一个iovec头部信息的数据
-//        else
-//        {
-//          m_iv[0].iov_base = m_write_buf + bytes_have_send;
-//          m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
-//        }
-//        // 重新注册写事件
-//        modfd(m_epollfd, m_sockfd, EPOLLOUT);
-//        return true;
-//      }
-//      //如果发送失败，但不是缓冲区问题，取消映射
-//      unmap();
-//      return false;
-//    }
-//
-//    bytes_to_send -= temp;
-//
-//    // 如果数据发送完毕
-//    if(bytes_to_send <= 0)
-//    {
-//      unmap();
-//      modfd(m_epollfd, m_sockfd, EPOLLIN);
-//      if(m_linger)
-//      {
-//        init();     // 保持连接，不关闭，重新初始化 http 对象
-//        return true;
-//      }
-//      else
-//        return false;
-//    }
-//  }
 }
 
 // 响应报文的填写

@@ -27,7 +27,7 @@
 - Chrome
 - FireFox
 
-#### 数据库的初始化
+#### 1. 数据库的初始化
 
 ```
 // 建立yourdb库
@@ -44,19 +44,19 @@ CREATE TABLE user(
 INSERT INTO user(username, passwd) VALUES('name', 'passwd');
 ```
 
-#### 修改 main.cpp 中的 connPool->init 参数
+#### 2. 修改 main.cpp 中的 connPool->init 参数
 
 ```
 connPool->init("localhost", "root", "yourpasswd", "databaseName", 3306, 8);
 ```
 
-#### 修改 http_conn.cpp 中的 doc_root 路径
+#### 3. 修改 http_conn.cpp 中的 doc_root 路径
 
 ```
-const char* doc_root = "/home/acg/webServer/root"
+const char* doc_root = "/home/acg/xlaoTinyWebServer/root"
 ```
 
-#### 自由组合 listenfd 和 connfd 的模式（LT/ET）和日志模式
+#### 4. 自由组合 listenfd 和 connfd 的模式（LT/ET）和日志模式
 
 ```
 //main.cpp:
@@ -71,13 +71,16 @@ const char* doc_root = "/home/acg/webServer/root"
 
 #define connfdET			//connfd为 ET
 //#define connfdLT
+
+#define listenET			//listenfd为 ET
+//#define listenLT	
 ```
 
 
 
 ### 开启服务器
 
-#### 生成server
+#### 1. 生成server
 
 ```
 make server
@@ -85,7 +88,7 @@ make server
 
 > 由于项目使用了 C++11 语法，部分编译器默认不支持，如果执行以上操作失败，请在 makefile 中的 "g++" 后添加 "--std=c++11"，再次执行以上操作。
 
-### 启动 server
+### 2. 启动 server
 
 > 如果使用的 mysql 是 root 用户，需要在一下语句前面添加 "sudo"
 
@@ -93,7 +96,7 @@ make server
 ./server port
 ```
 
-#### 浏览器
+#### 3. 浏览器
 
 ```
 127.0.0.1:port
@@ -103,3 +106,19 @@ make server
 
 ### 压力测试
 
+#### ET + ET，11640 QPS
+
+![](/home/acg/xlaoTinyWebServer/root/source/webbenchTest/ET+ET.png)
+
+
+#### LT + LT，10677 QPS
+
+![](/home/acg/xlaoTinyWebServer/root/source/webbenchTest/LT+LT.png)
+
+
+
+## 感谢
+
+游双编写的《Linux高性能服务器编程》。
+
+@[qinguoyi](https://github.com/qinguoyi)的 TinyWebServer 项目和庖丁解牛分析。
