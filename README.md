@@ -4,7 +4,7 @@
 
 本项目参考游双的《Linux高性能服务器编程》和 qinguoyi 前辈的 **[ TinyWebServer](https://github.com/qinguoyi/TinyWebServer)**，自制实现一个 Linux 下 C++ 轻量级的 Web 服务器，该服务器拥有以下特性：
 
-- 半同步/半反应堆线程池 + epoll（LT + ET）+ 同步 I/O 模拟 Proactor的并发模型。
+- 半同步/半反应堆线程池 + epoll（LT + ET）+ Reactor 的并发模型。
 - 使用主从状态机处理 http 请求，支持 GET 和 POST 请求。
 - Web 实现注册、登录、查看图片和视频的功能。
 - 使用日志系统记录服务器运行状态，日志系统支持同步/异步，异步使用循环数组实现。
